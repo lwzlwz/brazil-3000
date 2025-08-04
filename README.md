@@ -51,3 +51,8 @@ Choose your difficulty, translate sentences, and improve your Portuguese! Incorr
 - `irregular_verbs.txt` - 250+ irregular verbs organized by frequency tiers
 - `review.txt` - Your personal review list (auto-generated)
 - `.env` - Your API configuration (not tracked)
+
+## Backlog / Ideas
+
+- append feedback/corrections to feedback.txt file (personal so in .gitignore)
+- add user menu item to summarise tutor feedback (via LLM call) to reflect on and improve learning 
