@@ -6,7 +6,7 @@ AI-powered Brazilian Portuguese learning tool with interactive translation pract
 
 - **Practice Mode**: Translate English sentences to Portuguese with AI feedback
 - **Review Mode**: Retry previously incorrect translations until mastered
-- **Smart Difficulty**: Easy (1000 words), Medium (2000 words), Hard (3000 words)
+- **Smart Difficulty**: Easy (simple present tense), Medium (past/future tense), Hard (compound sentences)
 - **Clean Interface**: Simple, distraction-free learning experience
 
 ## Requirements

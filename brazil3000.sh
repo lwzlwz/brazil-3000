@@ -240,8 +240,8 @@ CRITICAL RULES:
 1. Write ONLY in English - NO Portuguese words in the English sentence
 2. Use common English vocabulary only
 3. The sentence should translate naturally to Portuguese using \"$word\"
-4. $difficulty level: Easy=simple, Medium=compound, Hard=complex
-5. Length: 8-15 words
+4. $difficulty level: Easy=very simple present tense, Medium=simple past/future, Hard=compound sentences
+5. Length: 6-12 words (keep it short and clear)
 
 Example format:
 ENGLISH: The organization helps people in the community.
