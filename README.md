@@ -36,14 +36,14 @@ AI-powered Brazilian Portuguese learning tool with interactive translation pract
 ## Usage
 
 ```bash
-./brazil2000.sh
+./brazil3000.sh
 ```
 
 Choose your difficulty, translate sentences, and improve your Portuguese! Incorrect answers automatically go to your review list for focused practice.
 
 ## Files
 
-- `brazil2000.sh` - Main application
+- `brazil3000.sh` - Main application
 - `brazilian_words.txt` - 3000 Portuguese words (frequency ordered)  
 - `review.txt` - Your personal review list (auto-generated)
 - `.env` - Your API configuration (not tracked)
