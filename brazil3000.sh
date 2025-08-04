@@ -7,7 +7,9 @@ WORDS_FILE="$SCRIPT_DIR/brazilian_words.txt"
 IRREGULAR_VERBS_FILE="$SCRIPT_DIR/irregular_verbs.txt"
 ENV_FILE="$SCRIPT_DIR/.env"
 
-SELECTED_MODEL="gemma2-9b-it"
+#SELECTED_MODEL="gemma2-9b-it"
+SELECTED_MODEL="moonshotai/kimi-k2-instruct"
+SYSTEM_PROMPT="You are an expert but encouraging Brazilian Portuguese tutor. Always use BRAZILIAN Portuguese (never European Portuguese). Be a bit lenient and flexible, focus on good communication. Remember: você uses 3rd person conjugations (você tem, not você tens). Ignore missing accents in student answers. Give direct, concise responses without extra formatting or explanations."
 
 check_dependencies() {
     if ! command -v gum >/dev/null 2>&1; then
@@ -92,7 +94,7 @@ practice_loop() {
         
         [[ -z "$sentence_data" ]] && { echo "Error generating sentence. Trying again..."; continue; }
         
-        local english=$(echo "$sentence_data" | grep "ENGLISH:" | sed 's/ENGLISH: //')
+        local english="$sentence_data"
         
         echo "$english"
         echo
@@ -204,7 +206,11 @@ verb_practice_loop() {
     local verb_tiers="$2"
     local include_regular="$3"
     
-    echo "Starting verb conjugation practice"
+    local correct_count=0
+    local total_count=0
+    
+    gum style --foreground 34 "Exercise Conjugations Started"
+    gum style --foreground 244 --faint "Selected tenses: $(echo "$selected_tenses" | tr '\n' ', ' | sed 's/, $//')"
     echo "Type 'quit' or 'exit' to return"
     echo
     
@@ -220,13 +226,15 @@ verb_practice_loop() {
         local person=$(echo "$verb_exercise" | grep "PERSON:" | sed 's/PERSON: //')
         local correct_form=$(echo "$verb_exercise" | grep "CONJUGATION:" | sed 's/CONJUGATION: //')
         
+        
         # Convert tense to short form
         local tense_short=$(echo "$tense" | sed 's/Present.*/present/; s/Preterite.*/preterite/; s/Imperfect.*/imperfect/; s/Future.*/future/; s/Conditional.*/conditional/; s/Present Subjunctive.*/subjunctive/')
         
-        echo "$infinitive ($tense_short)"
+        # Show context with actual AI response data
+        gum style --foreground 244 --faint "Conjugate: $infinitive ($tense_short)"
         echo
         
-        user_conjugation=$(gum input --value "$person " --placeholder "$person ...")
+        user_conjugation=$(gum input --value "$person " --placeholder "$person [conjugated verb]" --prompt "→ ")
         [[ "$user_conjugation" == "quit" || "$user_conjugation" == "exit" ]] && break
         
         # Extract just the verb part (remove the pronoun)
@@ -234,12 +242,29 @@ verb_practice_loop() {
         [[ "$user_verb" == "$user_conjugation" ]] && user_verb="" # If no pronoun was there
         
         echo
+        ((total_count++))
+        
         if [[ "$user_verb" == "$correct_form" ]]; then
-            gum style --foreground 34 "  ✓ Correct: $user_conjugation"
+            ((correct_count++))
+            gum style --foreground 34 "✓ $user_conjugation"
+            gum style --foreground 34 --faint "  Perfect!"
         else
-            gum style --foreground 226 "  ✗ Your answer: $user_conjugation"
-            gum style --foreground 34 "    Correct: $person $correct_form"
+            gum style --foreground 226 "✗ $user_conjugation"
+            gum style --foreground 34 "✓ $person $correct_form"
+            
+            # Show learning tip for common mistakes
+            case "$infinitive" in
+                "ter"|"vir"|"ver")
+                    if [[ "$person" == "você" && "$user_verb" == *"s"* ]]; then
+                        gum style --foreground 244 --faint "  💡 Remember: 'você' uses 3rd person (like ele/ela)"
+                    fi
+                    ;;
+            esac
         fi
+        
+        # Show session progress
+        local percentage=$((correct_count * 100 / total_count))
+        gum style --foreground 244 --faint "  Session: $correct_count/$total_count correct ($percentage%)"
         
         echo
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -288,60 +313,47 @@ get_random_verb_from_tiers() {
 call_groq_api() {
     local prompt="$1"
     
-    # Use jq to properly escape JSON if available, otherwise manual escaping
-    local json_payload
-    if command -v jq >/dev/null 2>&1; then
-        json_payload=$(jq -n --arg model "$SELECTED_MODEL" --arg content "$prompt" '{
-            model: $model,
-            messages: [
-                {
-                    role: "user",
-                    content: $content
-                }
-            ]
-        }')
-    else
-        # Manual JSON escaping for special characters
-        local escaped_prompt=$(printf '%s' "$prompt" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
-        json_payload=$(cat <<EOF
-{
-    "model": "$SELECTED_MODEL",
-    "messages": [
-        {
-            "role": "user",
-            "content": "$escaped_prompt"
-        }
-    ]
-}
-EOF
-)
-    fi
+    # Escape prompts for JSON - handle newlines and quotes
+    local escaped_system=$(printf '%s' "$SYSTEM_PROMPT" | sed 's/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+    local escaped_prompt=$(printf '%s' "$prompt" | sed 's/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')
+    
+    # JSON with system and user messages
+    local json_payload="{\"model\":\"$SELECTED_MODEL\",\"messages\":[{\"role\":\"system\",\"content\":\"$escaped_system\"},{\"role\":\"user\",\"content\":\"$escaped_prompt\"}]}"
     
     local response=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
         -H "Authorization: Bearer $GROQ_API_KEY" \
         -H "Content-Type: application/json" \
         -d "$json_payload")
     
-    # Check for errors in response
+    # Simple error check
     if echo "$response" | grep -q '"error"'; then
-        local error_msg
-        if command -v jq >/dev/null 2>&1; then
-            error_msg=$(echo "$response" | jq -r '.error.message // .error')
-        else
-            error_msg=$(echo "$response" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
-        fi
-        gum style --foreground 196 "API Error: $error_msg"
+        gum style --foreground 196 "API Error occurred"
         return 1
     fi
     
+    # Extract content with better parsing that handles escaped characters
     local content
-    if command -v jq >/dev/null 2>&1; then
-        content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+    if command -v python3 >/dev/null 2>&1; then
+        content=$(echo "$response" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data['choices'][0]['message']['content'])
+except:
+    pass
+")
     else
-        content=$(echo "$response" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p' | head -n 1)
+        # Fallback: improved sed parsing
+        content=$(echo "$response" | sed -n 's/.*"content":"\(.*\)","refusal".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+        if [[ -z "$content" ]]; then
+            content=$(echo "$response" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+        fi
     fi
     
-    [[ -z "$content" || "$content" == "null" ]] && { gum style --foreground 196 "Error: Empty response from API"; return 1; }
+    if [[ -z "$content" ]]; then
+        gum style --foreground 196 "Error: Empty response"
+        return 1
+    fi
     
     echo "$content"
 }
@@ -349,23 +361,16 @@ EOF
 generate_sentence() {
     local word="$1"
     local difficulty="$2"
-    local prompt="You are creating English sentences for BRAZILIAN Portuguese translation practice.
+    local prompt="Create an English sentence for Portuguese translation practice using the word \"$word\".
 
-Task: Create an English sentence that can be translated to BRAZILIAN Portuguese using the word \"$word\"
+Requirements:
+- Write ONLY in English - NO Portuguese words in the English sentence
+- Use common English vocabulary only
+- The sentence should translate naturally to Portuguese using \"$word\"
+- $difficulty level: Easy=very simple present tense, Medium=simple past/future, Hard=compound sentences
+- Length: 6-12 words (keep it short and clear)
 
-CRITICAL RULES:
-1. Write ONLY in English - NO Portuguese words in the English sentence
-2. Use common English vocabulary only
-3. The sentence should translate naturally to BRAZILIAN Portuguese using \"$word\"
-4. $difficulty level: Easy=very simple present tense, Medium=simple past/future, Hard=compound sentences
-5. Length: 6-12 words (keep it short and clear)
-6. BRAZILIAN Portuguese ONLY (not European Portuguese)
-
-Example format:
-ENGLISH: The organization helps people in the community.
-PORTUGUESE: A organização ajuda pessoas na comunidade.
-
-Your response:"
+Respond with just the English sentence (no labels or formatting)."
     
     call_groq_api "$prompt"
 }
@@ -374,37 +379,24 @@ generate_verb_exercise() {
     local selected_tenses="$1"
     local selected_verb="$2"
     local include_regular="$3"
-    local prompt="Generate a BRAZILIAN Portuguese verb conjugation exercise.
-
-Selected tenses: $selected_tenses
-Use this specific verb: $selected_verb
-Verb types: $include_regular
-
-CRITICAL: Use BRAZILIAN Portuguese only (NOT European Portuguese)
-- No \"vós\" - it doesn't exist in Brazilian Portuguese
-- Use Brazilian conjugations and vocabulary
-- IMPORTANT: \"você\" uses the same conjugation as \"ele/ela\" (3rd person singular)
-- NEVER use \"tens\" with \"você\" - use \"tem\" (Brazilian Portuguese)
-
-BRAZILIAN Portuguese conjugation rules:
-- eu: 1st person singular
-- você: 3rd person singular (same as ele/ela)
-- ele/ela: 3rd person singular
-- nós: 1st person plural
-- vocês: 3rd person plural (same as eles/elas)
-- eles/elas: 3rd person plural
-
-Requirements:
-- Use the verb \"$selected_verb\" as specified
-- Choose one of the selected tenses randomly: $selected_tenses
-- Pick a random person (eu, você, ele/ela, nós, vocês, eles/elas)
-- Provide the correct BRAZILIAN Portuguese conjugation for \"$selected_verb\"
+    
+    # Pick random tense from selected tenses
+    local tenses_array=($selected_tenses)
+    local random_tense_index=$((RANDOM % ${#tenses_array[@]}))
+    local chosen_tense="${tenses_array[$random_tense_index]}"
+    
+    # Pick random person
+    local persons=("eu" "você" "ele" "ela" "nós" "vocês" "eles" "elas")
+    local random_person_index=$((RANDOM % ${#persons[@]}))
+    local chosen_person="${persons[$random_person_index]}"
+    
+    local prompt="Conjugate the verb \"$selected_verb\" for the person \"$chosen_person\" in the tense \"$chosen_tense\".
 
 Format your response as exactly four lines:
 INFINITIVE: $selected_verb
-TENSE: [chosen tense name from the selected tenses]
-PERSON: [person - eu, você, ele/ela, nós, vocês, eles/elas]
-CONJUGATION: [correct conjugated form of $selected_verb]
+TENSE: $chosen_tense
+PERSON: $chosen_person
+CONJUGATION: [correct conjugated form of $selected_verb for $chosen_person in $chosen_tense]
 
 Example:
 INFINITIVE: ter
@@ -418,28 +410,19 @@ CONJUGATION: tem"
 evaluate_translation() {
     local english="$1"
     local user_answer="$2"
-    local prompt="Evaluate this BRAZILIAN Portuguese translation. Be very lenient and encouraging like a supportive tutor.
+    local prompt="Evaluate this Portuguese translation:
 
 English: $english
 User translation: $user_answer
 
-CRITICAL: Evaluate using BRAZILIAN Portuguese standards (NOT European Portuguese)
-
-LENIENT GUIDELINES:
+Guidelines:
 - If the meaning is understood: CORRECT (even with minor errors)
 - Ignore: missing accents, minor spelling, alternative word choices
-- Only mark INCORRECT if meaning is completely wrong or incomprehensible
 - Remember: communication over perfection
-- Use BRAZILIAN Portuguese forms and vocabulary in corrections
-
-Examples of what should be CORRECT:
-- \"cafe\" instead of \"café\" (missing accent)
-- \"mais jovem\" vs \"mais novo\" (both mean youngest)
-- \"e\" instead of \"é\" (missing accent but clear meaning)
 
 Response format:
 CORRECT: Great job! [optional: minor tip if needed]
-INCORRECT: [only if meaning is completely wrong - provide BRAZILIAN Portuguese correction]
+INCORRECT: [only if meaning is completely wrong - provide correct Portuguese translation]
 
 Be encouraging. Keep under 25 words."
     
