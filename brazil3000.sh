@@ -9,7 +9,7 @@ ENV_FILE="$SCRIPT_DIR/.env"
 
 #SELECTED_MODEL="gemma2-9b-it"
 SELECTED_MODEL="moonshotai/kimi-k2-instruct"
-SYSTEM_PROMPT="You are an expert but encouraging Brazilian Portuguese tutor. Always use BRAZILIAN Portuguese (never European Portuguese). Be a bit lenient and flexible, focus on good communication. Remember: você uses 3rd person conjugations (você tem, not você tens). Ignore missing accents in student answers. Give direct, concise responses without extra formatting or explanations."
+SYSTEM_PROMPT="You are an expert Brazilian Portuguese tutor. Always use BRAZILIAN Portuguese (never European Portuguese).  Remember: você uses 3rd person conjugations (você tem, not você tens). Ignore missing accents in student answers. Give direct, concise responses without extra formatting or explanations."
 
 check_dependencies() {
     if ! command -v gum >/dev/null 2>&1; then
@@ -410,21 +410,21 @@ CONJUGATION: tem"
 evaluate_translation() {
     local english="$1"
     local user_answer="$2"
-    local prompt="Evaluate this Portuguese translation:
+    local prompt="Evaluate this Brazilian Portuguese translation:
 
 English: $english
 User translation: $user_answer
 
 Guidelines:
-- If the meaning is understood: CORRECT (even with minor errors)
-- Ignore: missing accents, minor spelling, alternative word choices
-- Remember: communication over perfection
+- CORRECT: Only if grammatically correct with proper Brazilian Portuguese vocabulary and verb forms
+- INCORRECT: Mark wrong if there are: wrong verb forms, incorrect vocabulary, wrong gender/number agreement, or awkward phrasing
+- Ignore ONLY: missing accent marks (but count other spelling errors)
 
 Response format:
-CORRECT: Great job! [optional: minor tip if needed]
-INCORRECT: [only if meaning is completely wrong - provide correct Portuguese translation]
+CORRECT: Perfect! [brief positive comment]
+INCORRECT: [provide the correct Brazilian Portuguese translation with brief explanation]
 
-Be encouraging. Keep under 25 words."
+Be precise and educational. Keep under 25 words."
     
     call_groq_api "$prompt"
 }
