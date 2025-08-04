@@ -4,6 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REVIEW_FILE="$SCRIPT_DIR/review.txt"
 WORDS_FILE="$SCRIPT_DIR/brazilian_words.txt"
+IRREGULAR_VERBS_FILE="$SCRIPT_DIR/irregular_verbs.txt"
 ENV_FILE="$SCRIPT_DIR/.env"
 
 SELECTED_MODEL="gemma2-9b-it"
@@ -179,24 +180,38 @@ verb_mode() {
     [[ -z "$selected_tenses" ]] && { echo "No tenses selected"; return; }
     
     echo
+    echo "Select verb difficulty (frequency):"
+    local verb_tiers=$(gum choose --no-limit \
+        "Tier 1 (most common: ser, ter, estar, fazer)" \
+        "Tier 2 (common: pedir, ouvir, sentir)" \
+        "Tier 3 (moderate: preferir, construir)" \
+        "Tier 4 (less common: requerer, prever)" \
+        "Tier 5 (uncommon: antever, predizer)" \
+        "Tier 6 (rare: jazer, liquefazer)")
+    
+    [[ -z "$verb_tiers" ]] && { echo "No tiers selected"; return; }
+    
+    echo
     echo "Include regular verbs?"
     local include_regular=$(gum choose "Irregular verbs only" "Include regular verbs")
     
     echo
-    verb_practice_loop "$selected_tenses" "$include_regular"
+    verb_practice_loop "$selected_tenses" "$verb_tiers" "$include_regular"
 }
 
 verb_practice_loop() {
     local selected_tenses="$1"
-    local include_regular="$2"
+    local verb_tiers="$2"
+    local include_regular="$3"
     
     echo "Starting verb conjugation practice"
     echo "Type 'quit' or 'exit' to return"
     echo
     
     while true; do
+        local selected_verb=$(get_random_verb_from_tiers "$verb_tiers")
         gum spin --spinner line --title "Generating..." -- sleep 1
-        local verb_exercise=$(generate_verb_exercise "$selected_tenses" "$include_regular")
+        local verb_exercise=$(generate_verb_exercise "$selected_tenses" "$selected_verb" "$include_regular")
         
         [[ -z "$verb_exercise" ]] && { echo "Error generating exercise. Trying again..."; continue; }
         
@@ -223,7 +238,7 @@ verb_practice_loop() {
             gum style --foreground 34 "  ✓ Correct: $user_conjugation"
         else
             gum style --foreground 226 "  ✗ Your answer: $user_conjugation"
-            gum style --foreground 226 "    Correct: $person $correct_form"
+            gum style --foreground 34 "    Correct: $person $correct_form"
         fi
         
         echo
@@ -237,6 +252,37 @@ get_random_word() {
     local line_count=$(head -n "$limit" "$WORDS_FILE" | wc -l)
     local random_line=$((RANDOM % line_count + 1))
     head -n "$limit" "$WORDS_FILE" | sed -n "${random_line}p"
+}
+
+get_random_verb_from_tiers() {
+    local verb_tiers="$1"
+    
+    # Extract tier numbers from selection
+    local tier_numbers=""
+    while IFS= read -r tier_line; do
+        local tier_num=$(echo "$tier_line" | sed 's/Tier \([0-9]\).*/\1/')
+        tier_numbers="$tier_numbers $tier_num"
+    done <<< "$verb_tiers"
+    
+    # Get all verbs from selected tiers
+    local temp_file=$(mktemp)
+    for tier in $tier_numbers; do
+        grep "^$tier " "$IRREGULAR_VERBS_FILE" >> "$temp_file"
+    done
+    
+    # Select random verb from filtered list
+    local verb_count=$(wc -l < "$temp_file")
+    if [[ $verb_count -eq 0 ]]; then
+        rm -f "$temp_file"
+        echo "ser" # fallback
+        return
+    fi
+    
+    local random_line=$((RANDOM % verb_count + 1))
+    local selected_verb=$(sed -n "${random_line}p" "$temp_file" | cut -d' ' -f2)
+    rm -f "$temp_file"
+    
+    echo "$selected_verb"
 }
 
 call_groq_api() {
@@ -326,35 +372,45 @@ Your response:"
 
 generate_verb_exercise() {
     local selected_tenses="$1"
-    local include_regular="$2"
+    local selected_verb="$2"
+    local include_regular="$3"
     local prompt="Generate a BRAZILIAN Portuguese verb conjugation exercise.
 
 Selected tenses: $selected_tenses
+Use this specific verb: $selected_verb
 Verb types: $include_regular
 
 CRITICAL: Use BRAZILIAN Portuguese only (NOT European Portuguese)
 - No \"vós\" - it doesn't exist in Brazilian Portuguese
 - Use Brazilian conjugations and vocabulary
+- IMPORTANT: \"você\" uses the same conjugation as \"ele/ela\" (3rd person singular)
+- NEVER use \"tens\" with \"você\" - use \"tem\" (Brazilian Portuguese)
+
+BRAZILIAN Portuguese conjugation rules:
+- eu: 1st person singular
+- você: 3rd person singular (same as ele/ela)
+- ele/ela: 3rd person singular
+- nós: 1st person plural
+- vocês: 3rd person plural (same as eles/elas)
+- eles/elas: 3rd person plural
 
 Requirements:
-- Pick a random Brazilian Portuguese verb (irregular preferred, but include regular if requested)
-- Choose one of the selected tenses randomly
+- Use the verb \"$selected_verb\" as specified
+- Choose one of the selected tenses randomly: $selected_tenses
 - Pick a random person (eu, você, ele/ela, nós, vocês, eles/elas)
-- Provide the correct BRAZILIAN Portuguese conjugation
-
-Common irregular verbs: ser, estar, ter, fazer, ir, vir, dar, dizer, poder, querer, saber, ver, pôr
+- Provide the correct BRAZILIAN Portuguese conjugation for \"$selected_verb\"
 
 Format your response as exactly four lines:
-INFINITIVE: [verb infinitive]
-TENSE: [tense name]
+INFINITIVE: $selected_verb
+TENSE: [chosen tense name from the selected tenses]
 PERSON: [person - eu, você, ele/ela, nós, vocês, eles/elas]
-CONJUGATION: [correct conjugated form]
+CONJUGATION: [correct conjugated form of $selected_verb]
 
 Example:
-INFINITIVE: ser
+INFINITIVE: ter
 TENSE: Present
-PERSON: eu
-CONJUGATION: sou"
+PERSON: você
+CONJUGATION: tem"
     
     call_groq_api "$prompt"
 }

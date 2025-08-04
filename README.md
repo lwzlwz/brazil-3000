@@ -5,6 +5,7 @@ AI-powered Brazilian Portuguese learning tool with interactive translation pract
 ## Features
 
 - **Practice Mode**: Translate English sentences to Portuguese with AI feedback
+- **Exercise Conjugations**: Practice irregular verb conjugations with tier-based difficulty
 - **Review Mode**: Retry previously incorrect translations until mastered
 - **Smart Difficulty**: Easy (simple present tense), Medium (past/future tense), Hard (compound sentences)
 - **Clean Interface**: Simple, distraction-free learning experience
@@ -44,6 +45,7 @@ Choose your difficulty, translate sentences, and improve your Portuguese! Incorr
 ## Files
 
 - `brazil3000.sh` - Main application
-- `brazilian_words.txt` - 3000 Portuguese words (frequency ordered)  
+- `brazilian_words.txt` - 3000 Portuguese words (frequency ordered)
+- `irregular_verbs.txt` - 250+ irregular verbs organized by frequency tiers
 - `review.txt` - Your personal review list (auto-generated)
 - `.env` - Your API configuration (not tracked)
