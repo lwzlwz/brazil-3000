@@ -36,7 +36,7 @@ show_header() {
     gum style \
         --foreground 226 --border-foreground 34 --border double \
         --align center --width 50 --margin "1 0" --padding "2 4" \
-        'Brazil 2000 - Portuguese CLI' 'AI-Powered Learning Tool'
+        'Brazil 3000 - Portuguese CLI' 'AI-Powered Learning Tool'
     echo
 }
 
@@ -48,13 +48,14 @@ main_menu() {
         # Show review count if file exists
         if [[ -f "$REVIEW_FILE" && -s "$REVIEW_FILE" ]]; then
             local count=$(wc -l < "$REVIEW_FILE")
-            choice=$(gum choose "Practice Mode" "Review Mode ($count items)" "Exit")
+            choice=$(gum choose "Practice Mode" "Exercise Conjugations" "Review Mode ($count items)" "Exit")
         else
-            choice=$(gum choose "Practice Mode" "Review Mode" "Exit")
+            choice=$(gum choose "Practice Mode" "Exercise Conjugations" "Review Mode" "Exit")
         fi
         
         case "$choice" in
             "Practice Mode") practice_mode;;
+            "Exercise Conjugations") verb_mode;;
             *"Review Mode"*) review_mode;;
             "Exit") gum style --foreground 226 "Goodbye!"; exit 0;;
         esac
@@ -107,9 +108,9 @@ practice_loop() {
             gum style --foreground 34 "    $(echo "$evaluation" | sed 's/CORRECT: //')"
         else
             gum style --foreground 226 "  ✗ Your answer: $user_translation"  
-            gum style --foreground 226 "    $(echo "$evaluation" | sed 's/INCORRECT: //')"
+            gum style --foreground 226 "    My feedback: $(echo "$evaluation" | sed 's/INCORRECT: //')"
             echo "$english" >> "$REVIEW_FILE"
-            echo "Added to review"
+            gum style --foreground 226 "    Added to review"
         fi
         
         echo
@@ -144,10 +145,10 @@ review_mode() {
             gum style --foreground 34 "  ✓ Your answer: $user_translation"
             gum style --foreground 34 "    $(echo "$evaluation" | sed 's/CORRECT: //')"
             tail -n +2 "$REVIEW_FILE" > "$temp_file" && mv "$temp_file" "$REVIEW_FILE"
-            echo "Removed from review"
+            gum style --foreground 34 "    Removed from review"
         else
             gum style --foreground 226 "  ✗ Your answer: $user_translation"
-            gum style --foreground 226 "    $(echo "$evaluation" | sed 's/INCORRECT: //')"
+            gum style --foreground 226 "    My feedback: $(echo "$evaluation" | sed 's/INCORRECT: //')"
             tail -n +2 "$REVIEW_FILE" > "$temp_file"
             echo "$english" >> "$temp_file"
             mv "$temp_file" "$REVIEW_FILE"
@@ -159,6 +160,76 @@ review_mode() {
     done
     
     [[ ! -s "$REVIEW_FILE" ]] && echo "All sentences completed!"
+}
+
+verb_mode() {
+    echo "Exercise Conjugations"
+    echo "Select tenses to practice:"
+    echo
+    
+    # Multi-select tenses
+    local selected_tenses=$(gum choose --no-limit \
+        "Present (Presente)" \
+        "Preterite (Pretérito Perfeito)" \
+        "Imperfect (Pretérito Imperfeito)" \
+        "Future (Futuro)" \
+        "Conditional (Condicional)" \
+        "Present Subjunctive (Presente do Subjuntivo)")
+    
+    [[ -z "$selected_tenses" ]] && { echo "No tenses selected"; return; }
+    
+    echo
+    echo "Include regular verbs?"
+    local include_regular=$(gum choose "Irregular verbs only" "Include regular verbs")
+    
+    echo
+    verb_practice_loop "$selected_tenses" "$include_regular"
+}
+
+verb_practice_loop() {
+    local selected_tenses="$1"
+    local include_regular="$2"
+    
+    echo "Starting verb conjugation practice"
+    echo "Type 'quit' or 'exit' to return"
+    echo
+    
+    while true; do
+        gum spin --spinner line --title "Generating..." -- sleep 1
+        local verb_exercise=$(generate_verb_exercise "$selected_tenses" "$include_regular")
+        
+        [[ -z "$verb_exercise" ]] && { echo "Error generating exercise. Trying again..."; continue; }
+        
+        local infinitive=$(echo "$verb_exercise" | grep "INFINITIVE:" | sed 's/INFINITIVE: //')
+        local tense=$(echo "$verb_exercise" | grep "TENSE:" | sed 's/TENSE: //')
+        local person=$(echo "$verb_exercise" | grep "PERSON:" | sed 's/PERSON: //')
+        local correct_form=$(echo "$verb_exercise" | grep "CONJUGATION:" | sed 's/CONJUGATION: //')
+        
+        # Convert tense to short form
+        local tense_short=$(echo "$tense" | sed 's/Present.*/present/; s/Preterite.*/preterite/; s/Imperfect.*/imperfect/; s/Future.*/future/; s/Conditional.*/conditional/; s/Present Subjunctive.*/subjunctive/')
+        
+        echo "$infinitive ($tense_short)"
+        echo
+        
+        user_conjugation=$(gum input --value "$person " --placeholder "$person ...")
+        [[ "$user_conjugation" == "quit" || "$user_conjugation" == "exit" ]] && break
+        
+        # Extract just the verb part (remove the pronoun)
+        local user_verb=$(echo "$user_conjugation" | sed "s/^$person //")
+        [[ "$user_verb" == "$user_conjugation" ]] && user_verb="" # If no pronoun was there
+        
+        echo
+        if [[ "$user_verb" == "$correct_form" ]]; then
+            gum style --foreground 34 "  ✓ Correct: $user_conjugation"
+        else
+            gum style --foreground 226 "  ✗ Your answer: $user_conjugation"
+            gum style --foreground 226 "    Correct: $person $correct_form"
+        fi
+        
+        echo
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo
+    done
 }
 
 get_random_word() {
@@ -232,16 +303,17 @@ EOF
 generate_sentence() {
     local word="$1"
     local difficulty="$2"
-    local prompt="You are creating English sentences for Portuguese translation practice.
+    local prompt="You are creating English sentences for BRAZILIAN Portuguese translation practice.
 
-Task: Create an English sentence that can be translated to Portuguese using the word \"$word\"
+Task: Create an English sentence that can be translated to BRAZILIAN Portuguese using the word \"$word\"
 
 CRITICAL RULES:
 1. Write ONLY in English - NO Portuguese words in the English sentence
 2. Use common English vocabulary only
-3. The sentence should translate naturally to Portuguese using \"$word\"
+3. The sentence should translate naturally to BRAZILIAN Portuguese using \"$word\"
 4. $difficulty level: Easy=very simple present tense, Medium=simple past/future, Hard=compound sentences
 5. Length: 6-12 words (keep it short and clear)
+6. BRAZILIAN Portuguese ONLY (not European Portuguese)
 
 Example format:
 ENGLISH: The organization helps people in the community.
@@ -252,24 +324,68 @@ Your response:"
     call_groq_api "$prompt"
 }
 
+generate_verb_exercise() {
+    local selected_tenses="$1"
+    local include_regular="$2"
+    local prompt="Generate a BRAZILIAN Portuguese verb conjugation exercise.
+
+Selected tenses: $selected_tenses
+Verb types: $include_regular
+
+CRITICAL: Use BRAZILIAN Portuguese only (NOT European Portuguese)
+- No \"vós\" - it doesn't exist in Brazilian Portuguese
+- Use Brazilian conjugations and vocabulary
+
+Requirements:
+- Pick a random Brazilian Portuguese verb (irregular preferred, but include regular if requested)
+- Choose one of the selected tenses randomly
+- Pick a random person (eu, você, ele/ela, nós, vocês, eles/elas)
+- Provide the correct BRAZILIAN Portuguese conjugation
+
+Common irregular verbs: ser, estar, ter, fazer, ir, vir, dar, dizer, poder, querer, saber, ver, pôr
+
+Format your response as exactly four lines:
+INFINITIVE: [verb infinitive]
+TENSE: [tense name]
+PERSON: [person - eu, você, ele/ela, nós, vocês, eles/elas]
+CONJUGATION: [correct conjugated form]
+
+Example:
+INFINITIVE: ser
+TENSE: Present
+PERSON: eu
+CONJUGATION: sou"
+    
+    call_groq_api "$prompt"
+}
+
 evaluate_translation() {
     local english="$1"
     local user_answer="$2"
-    local prompt="Evaluate this Portuguese translation. Be consistent and fair.
+    local prompt="Evaluate this BRAZILIAN Portuguese translation. Be very lenient and encouraging like a supportive tutor.
 
 English: $english
 User translation: $user_answer
 
-Guidelines:
-- If meaning is clear and grammar is mostly correct: CORRECT
-- Consider: meaning accuracy, basic grammar, Brazilian Portuguese usage
-- Ignore minor spelling/accent errors. Be lenient to encourage learning like a good tutor. 
+CRITICAL: Evaluate using BRAZILIAN Portuguese standards (NOT European Portuguese)
+
+LENIENT GUIDELINES:
+- If the meaning is understood: CORRECT (even with minor errors)
+- Ignore: missing accents, minor spelling, alternative word choices
+- Only mark INCORRECT if meaning is completely wrong or incomprehensible
+- Remember: communication over perfection
+- Use BRAZILIAN Portuguese forms and vocabulary in corrections
+
+Examples of what should be CORRECT:
+- \"cafe\" instead of \"café\" (missing accent)
+- \"mais jovem\" vs \"mais novo\" (both mean youngest)
+- \"e\" instead of \"é\" (missing accent but clear meaning)
 
 Response format:
-CORRECT: [brief positive feedback]
-INCORRECT: [provide correct translation]
+CORRECT: Great job! [optional: minor tip if needed]
+INCORRECT: [only if meaning is completely wrong - provide BRAZILIAN Portuguese correction]
 
-Keep response under 30 words."
+Be encouraging. Keep under 25 words."
     
     call_groq_api "$prompt"
 }
