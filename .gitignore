@@ -1,0 +1,12 @@
+# Environment variables
+.env
+
+# Review file (personal progress)
+review.txt
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*~
