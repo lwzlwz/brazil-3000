@@ -2,6 +2,9 @@
 
 AI-powered Brazilian Portuguese learning tool with interactive translation practice.
 
+[Screenshot-2025-08-04-at-18-09-41.png](https://postimg.cc/jCHQ6Hbh)
+
+
 ## Features
 
 - **Practice Mode**: Translate English sentences to Portuguese with AI feedback
