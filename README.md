@@ -56,3 +56,4 @@ Choose your difficulty, translate sentences, and improve your Portuguese! Incorr
 
 - append feedback/corrections to feedback.txt file (personal so in .gitignore)
 - add user menu item to summarise tutor feedback (via LLM call) to reflect on and improve learning 
+- correct/incorrect feedback in review mode is too rigid
